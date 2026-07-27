@@ -1,0 +1,56 @@
+{
+  "name": "claude-code-studio",
+  "version": "1.0.0",
+  "description": "Desktop GUI for Claude Code on Ubuntu — chat sidebar, saved history, session switching",
+  "main": "main.js",
+  "author": "Claude Code Studio",
+  "homepage": "https://github.com/claude-code-studio/claude-code-studio",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "rebuild": "electron-rebuild -f -w node-pty",
+    "dist": "electron-builder --linux deb"
+  },
+  "build": {
+    "appId": "com.claudecodestudio.app",
+    "productName": "Claude Code Studio",
+    "files": [
+      "main.js",
+      "renderer/**/*",
+      "build/icon.png"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/node-pty/**"
+    ],
+    "linux": {
+      "target": [
+        "deb"
+      ],
+      "category": "Development",
+      "icon": "build/icon.png",
+      "maintainer": "Claude Code Studio",
+      "executableName": "claude-code-studio"
+    },
+    "deb": {
+      "depends": [
+        "libnotify4",
+        "libxtst6",
+        "libnss3"
+      ]
+    }
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.3.145",
+    "@xterm/addon-fit": "^0.10.0",
+    "@xterm/xterm": "^5.5.0",
+    "markdown-it": "^14.1.1",
+    "marked": "^18.0.4",
+    "node-pty": "^1.0.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.7.1",
+    "electron": "^33.4.0",
+    "electron-builder": "^26.15.2"
+  }
+}

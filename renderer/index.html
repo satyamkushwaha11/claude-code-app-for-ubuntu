@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data:;"
+    />
+    <title>Claude Code Studio</title>
+    <link rel="stylesheet" href="../node_modules/@xterm/xterm/css/xterm.css" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <aside id="sidebar">
+        <div class="brand">
+          <div class="brand-mark">✳</div>
+          <div class="brand-text">Claude Code <span>Studio</span></div>
+        </div>
+
+        <button id="newChatBtn" class="new-chat-btn">＋ New chat</button>
+
+        <div class="hist-header">
+          <span class="hist-title">Chat history</span>
+          <button id="settingsBtn" class="trash-open-btn" title="Settings">⚙</button>
+          <button id="trashBtn" class="trash-open-btn" title="Deleted chats (Trash)">🗑</button>
+          <label class="switch" title="Show or hide saved chats">
+            <input type="checkbox" id="historyToggle" />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div id="histBody">
+          <input id="searchInput" class="search" placeholder="Search chats…" />
+          <div id="sessionList" class="session-list"></div>
+          <button id="refreshBtn" class="refresh-btn">⟳ Refresh</button>
+        </div>
+      </aside>
+
+      <main id="main">
+        <div id="topbar" style="display: none">
+          <div class="tab-info">
+            <div id="tabTitle" class="tab-title"></div>
+            <div id="tabMeta" class="tab-meta"></div>
+          </div>
+          <div class="mode-toggle">
+            <button id="modeChat" class="mode-btn active">Chat</button>
+            <button id="modeTerminal" class="mode-btn">Terminal</button>
+          </div>
+          <button id="closeTab" class="close-tab" title="Close this chat">✕</button>
+        </div>
+
+        <div id="tabStrip" class="tab-strip" style="display: none"></div>
+
+        <div id="panes"></div>
+
+        <div id="welcome">
+          <div class="welcome-inner">
+            <div class="welcome-mark">✳</div>
+            <h1>Start a new chat</h1>
+            <p class="welcome-sub">
+              Talk to Claude in a chat window. It can answer questions and, with
+              your approval, edit files and run commands.
+            </p>
+
+            <button id="quickChatBtn" class="quick-chat-btn">
+              💬 Start a quick chat
+              <span class="quick-chat-sub" id="quickChatPath"></span>
+            </button>
+
+            <div class="recent-label">Or pick a project folder</div>
+            <div id="recentFolders" class="recent-folders"></div>
+            <button id="browseBtn" class="browse-btn">📁 Browse for a folder…</button>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <!-- Onboarding / sign-in -->
+    <div id="onboarding" class="onboarding" style="display: none">
+      <div class="onboard-inner">
+        <div class="onboard-mark">✳</div>
+        <h1>Set up Claude Code Studio</h1>
+        <p class="onboard-status" id="onboardStatus">
+          We couldn't detect a signed-in Claude account on this computer.
+          Choose how you'd like to connect.
+        </p>
+
+        <div class="onboard-cards">
+          <div class="onboard-card">
+            <div class="onboard-card-title">🔑 Use an API key</div>
+            <div class="onboard-card-sub">
+              Paste an Anthropic API key. Best if you don't use the Claude CLI.
+              Get one at
+              <a href="https://console.anthropic.com/settings/keys" class="onboard-link"
+                >console.anthropic.com</a
+              >.
+            </div>
+            <input
+              id="apiKeyInput"
+              class="onboard-input"
+              type="password"
+              placeholder="sk-ant-…"
+              autocomplete="off"
+            />
+            <div class="onboard-err" id="apiKeyErr"></div>
+            <button id="apiKeySave" class="onboard-btn primary">Save & continue</button>
+          </div>
+
+          <div class="onboard-card">
+            <div class="onboard-card-title">👤 Sign in with your Claude subscription</div>
+            <div class="onboard-card-sub">
+              Use your Claude Pro/Max plan. This opens a sign-in terminal — finish
+              the login in your browser, then click “I've signed in”.
+            </div>
+            <button id="cliLoginBtn" class="onboard-btn">Open sign-in terminal</button>
+            <button id="recheckBtn" class="onboard-btn ghost">I've signed in — re-check</button>
+          </div>
+        </div>
+
+        <div class="onboard-foot" id="onboardFoot"></div>
+      </div>
+    </div>
+
+    <!-- Trash -->
+    <div id="trashModal" class="modal-overlay" style="display: none">
+      <div class="trash-card">
+        <div class="trash-head">
+          <div class="trash-card-title">🗑 Trash</div>
+          <div class="trash-card-sub">Deleted chats are kept for 30 days, then removed automatically.</div>
+          <button id="trashClose" class="trash-close" title="Close">✕</button>
+        </div>
+        <div id="trashList" class="trash-body"></div>
+      </div>
+    </div>
+
+    <!-- Settings -->
+    <div id="settingsModal" class="modal-overlay" style="display: none">
+      <div class="settings-card">
+        <div class="settings-head">
+          <div class="settings-title">⚙ Settings</div>
+          <button id="settingsClose" class="trash-close" title="Close">✕</button>
+        </div>
+        <div class="settings-body">
+          <div class="settings-row">
+            <label class="settings-label">Appearance</label>
+            <select id="setTheme" class="settings-select">
+              <option value="dark">Dark (default)</option>
+              <option value="light">Light</option>
+              <option value="contrast">High contrast</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label">Default model for new chats</label>
+            <select id="setModel" class="settings-select">
+              <option value="">CLI default</option>
+              <option value="opus">Claude Opus — most capable</option>
+              <option value="sonnet">Claude Sonnet — balanced</option>
+              <option value="haiku">Claude Haiku — fastest</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label">Default permission mode</label>
+            <select id="setMode" class="settings-select">
+              <option value="default">Ask each time</option>
+              <option value="acceptEdits">Auto-accept edits</option>
+              <option value="plan">Plan mode</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label">Chat data folder</label>
+            <div id="setDataDir" class="settings-value"></div>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label">Account</label>
+            <div class="settings-account">
+              <span id="setAuthLabel" class="settings-value"></span>
+              <button id="setSignOut" class="settings-btn ghost">Sign out (clear API key)</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Permission prompt -->
+    <div id="permModal" class="modal-overlay" style="display: none">
+      <div class="perm-card">
+        <div class="perm-icon">🔐</div>
+        <div class="perm-title" id="permTitle"></div>
+        <div class="perm-desc" id="permDesc"></div>
+        <pre class="perm-input" id="permInput"></pre>
+        <div class="perm-actions">
+          <button id="permDeny" class="perm-btn ghost">Don't allow</button>
+          <button id="permAllow" class="perm-btn primary">Allow</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      require('./renderer.js');
+    </script>
+  </body>
+</html>
