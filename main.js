@@ -143,8 +143,10 @@ function authStatus() {
 const ptys = new Map();
 /** clientId -> { queue, abort, query, sessionId } (chat view) */
 const chats = new Map();
-/** permId -> resolve fn for a pending permission prompt */
+/** permId -> { finish, clientId, toolName } for a pending permission prompt */
 const pendingPerms = new Map();
+/** clientId -> Set(toolName) the user chose to always allow this session */
+const alwaysAllow = new Map();
 let permSeq = 0;
 let win = null;
 
@@ -454,6 +456,10 @@ function makeCanUseTool(clientId) {
     if (AUTO_ALLOW_TOOLS.has(toolName)) {
       return Promise.resolve({ behavior: 'allow' });
     }
+    const remembered = alwaysAllow.get(clientId);
+    if (remembered && remembered.has(toolName)) {
+      return Promise.resolve({ behavior: 'allow' });
+    }
     const permId = 'perm' + ++permSeq;
     return new Promise((resolve) => {
       let settled = false;
@@ -463,7 +469,7 @@ function makeCanUseTool(clientId) {
         pendingPerms.delete(permId);
         resolve(result);
       };
-      pendingPerms.set(permId, finish);
+      pendingPerms.set(permId, { finish, clientId, toolName });
       if (opts && opts.signal) {
         opts.signal.addEventListener('abort', () =>
           finish({ behavior: 'deny', message: 'Cancelled.' })
@@ -486,15 +492,19 @@ function makeCanUseTool(clientId) {
   };
 }
 
-ipcMain.on('permission:response', (_e, { permId, allow }) => {
-  const finish = pendingPerms.get(permId);
-  if (finish) {
-    finish(
-      allow
-        ? { behavior: 'allow' }
-        : { behavior: 'deny', message: 'The user declined this action.' }
-    );
+ipcMain.on('permission:response', (_e, { permId, allow, remember }) => {
+  const pending = pendingPerms.get(permId);
+  if (!pending) return;
+  if (allow && remember && pending.clientId && pending.toolName) {
+    let set = alwaysAllow.get(pending.clientId);
+    if (!set) { set = new Set(); alwaysAllow.set(pending.clientId, set); }
+    set.add(pending.toolName);
   }
+  pending.finish(
+    allow
+      ? { behavior: 'allow' }
+      : { behavior: 'deny', message: 'The user declined this action.' }
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -580,6 +590,8 @@ app.on('before-quit', cleanupAll);
 
 ipcMain.handle('app:status', async () => {
   await loadSdk();
+  let claudeFound = false;
+  try { fs.statSync(CLAUDE_BIN); claudeFound = true; } catch (_) { claudeFound = CLAUDE_BIN === 'claude'; }
   return {
     sdkOk: !!sdk,
     sdkError,
@@ -587,6 +599,15 @@ ipcMain.handle('app:status', async () => {
     ptyError,
     defaultDir: ensureDefaultDir(),
     home: HOME,
+    claudeBin: CLAUDE_BIN,
+    claudeFound,
+    platform: process.platform,
+    versions: {
+      electron: process.versions.electron,
+      node: process.versions.node,
+      chrome: process.versions.chrome,
+    },
+    appVersion: app.getVersion(),
   };
 });
 
@@ -702,6 +723,14 @@ ipcMain.handle('dialog:saveText', async (_e, { defaultName, text } = {}) => {
 
 ipcMain.on('open:external', (_e, url) => {
   if (typeof url === 'string' && /^https?:\/\//.test(url)) shell.openExternal(url);
+});
+
+ipcMain.on('win:focus', () => {
+  if (win) {
+    if (win.isMinimized()) win.restore();
+    win.show();
+    win.focus();
+  }
 });
 
 // Bounded, fast file search under a chat's cwd for @-mention autocomplete.
@@ -923,6 +952,7 @@ ipcMain.handle('chat:interrupt', async (_e, { clientId }) => {
 });
 
 ipcMain.on('chat:stop', (_e, { clientId }) => {
+  alwaysAllow.delete(clientId);
   const entry = chats.get(clientId);
   if (!entry) return;
   try {

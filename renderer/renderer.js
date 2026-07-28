@@ -50,11 +50,15 @@ const el = {
   settingsModal: $('#settingsModal'),
   settingsClose: $('#settingsClose'),
   setTheme: $('#setTheme'),
+  setNotify: $('#setNotify'),
   setModel: $('#setModel'),
   setMode: $('#setMode'),
   setDataDir: $('#setDataDir'),
   setAuthLabel: $('#setAuthLabel'),
   setSignOut: $('#setSignOut'),
+  diagModal: $('#diagModal'),
+  diagClose: $('#diagClose'),
+  diagBody: $('#diagBody'),
   trashModal: $('#trashModal'),
   trashList: $('#trashList'),
   trashClose: $('#trashClose'),
@@ -82,6 +86,8 @@ const el = {
   permTitle: $('#permTitle'),
   permDesc: $('#permDesc'),
   permInput: $('#permInput'),
+  permRemember: $('#permRemember'),
+  permRememberLabel: $('#permRememberLabel'),
   permAllow: $('#permAllow'),
   permDeny: $('#permDeny'),
 };
@@ -792,8 +798,27 @@ ipcRenderer.on('chat:message', (_e, { clientId, msg }) => {
       loadModels(entry);
     }
   }
+  if (msg && msg.type === 'result' && !document.hasFocus()) {
+    notifyDone(entry, msg);
+  }
   if (entry.chatView) entry.chatView.handleSdkMessage(msg);
 });
+
+// Notify when a response finishes while the window is in the background.
+function notifyDone(entry, msg) {
+  if (localStorage.getItem('ccs.notifications') === 'off') return;
+  if (typeof Notification === 'undefined') return;
+  const title = displayTitle(entry.sessionId || entry.clientId, entry.title || 'Claude');
+  const ok = msg.subtype === 'success' && !msg.is_error;
+  const body = ok ? 'Claude finished responding.' : 'The response needs your attention.';
+  try {
+    const n = new Notification('✳ ' + title, { body, silent: false });
+    n.onclick = () => {
+      ipcRenderer.send('win:focus');
+      if (entry.clientId) setActive(entry.clientId);
+    };
+  } catch (_) { /* notifications unavailable */ }
+}
 
 ipcRenderer.on('chat:capabilities', (_e, { clientId, models, commands }) => {
   const entry = state.open.get(clientId);
@@ -899,13 +924,20 @@ function showPermModal(req) {
   const inputTxt = permInputText(req);
   el.permInput.textContent = inputTxt;
   el.permInput.style.display = inputTxt ? '' : 'none';
+  el.permRemember.checked = false;
+  el.permRememberLabel.textContent =
+    'Always allow ' + (req.toolName || 'this') + ' for this chat';
   el.permModal.style.display = 'flex';
 
   const done = (allow) => {
     el.permModal.style.display = 'none';
     el.permAllow.onclick = null;
     el.permDeny.onclick = null;
-    ipcRenderer.send('permission:response', { permId: req.permId, allow });
+    ipcRenderer.send('permission:response', {
+      permId: req.permId,
+      allow,
+      remember: allow && el.permRemember.checked,
+    });
     permActive = false;
     processPerm();
   };
@@ -993,6 +1025,7 @@ function applyTheme(theme) {
 
 async function openSettings() {
   el.setTheme.value = settings.theme;
+  el.setNotify.value = localStorage.getItem('ccs.notifications') === 'off' ? 'off' : 'on';
   el.setModel.value = settings.model;
   el.setMode.value = localStorage.getItem('ccs.permissionMode') || 'default';
   el.setDataDir.textContent = state.defaultDir || '(unknown)';
@@ -1009,6 +1042,10 @@ function wireSettings() {
     if (e.target === el.settingsModal) el.settingsModal.style.display = 'none';
   };
   el.setTheme.onchange = () => applyTheme(el.setTheme.value);
+  el.setNotify.onchange = () => {
+    localStorage.setItem('ccs.notifications', el.setNotify.value);
+    toast('Notifications ' + (el.setNotify.value === 'off' ? 'off' : 'on') + '.');
+  };
   el.setModel.onchange = () => {
     settings.model = el.setModel.value;
     localStorage.setItem('ccs.defaultModel', settings.model);
@@ -1028,6 +1065,40 @@ function wireSettings() {
     if (!auth || !auth.authed) showOnboarding(auth);
   };
 }
+
+// ---------------------------------------------------------------------------
+// Diagnostics
+// ---------------------------------------------------------------------------
+
+async function openDiagnostics() {
+  const s = await ipcRenderer.invoke('app:status');
+  const auth = state.auth || (await checkAuth());
+  const rows = [
+    ['Claude Agent SDK', s.sdkOk, s.sdkOk ? 'Loaded' : (s.sdkError || 'Not available')],
+    ['Terminal (node-pty)', s.ptyOk, s.ptyOk ? 'Ready' : (s.ptyError || 'Not built — run npm run rebuild')],
+    ['claude CLI', s.claudeFound, s.claudeBin || 'not found'],
+    ['Account', !!(auth && auth.authed), (auth && auth.label) || 'Not signed in'],
+    ['Chat data folder', true, s.defaultDir || '(unknown)'],
+    ['Platform', true, s.platform || '(unknown)'],
+    ['App version', true, s.appVersion || '(unknown)'],
+    ['Electron / Node / Chrome', true,
+      (s.versions ? s.versions.electron + ' / ' + s.versions.node + ' / ' + s.versions.chrome : '(unknown)')],
+  ];
+  let html = '';
+  for (const [label, ok, detail] of rows) {
+    html +=
+      '<div class="diag-row">' +
+      '<span class="diag-dot ' + (ok ? 'ok' : 'bad') + '"></span>' +
+      '<span class="diag-label">' + escapeHtml(label) + '</span>' +
+      '<span class="diag-detail">' + escapeHtml(detail) + '</span>' +
+      '</div>';
+  }
+  el.diagBody.innerHTML = html;
+  el.diagModal.style.display = 'flex';
+}
+
+el.diagClose.onclick = () => { el.diagModal.style.display = 'none'; };
+el.diagModal.onclick = (e) => { if (e.target === el.diagModal) el.diagModal.style.display = 'none'; };
 
 // ---------------------------------------------------------------------------
 // Command palette (Ctrl/Cmd+K)
@@ -1076,6 +1147,7 @@ function paletteActions() {
         applyTheme(order[(order.indexOf(settings.theme) + 1) % order.length]);
         toast('Theme: ' + settings.theme);
       } },
+    { icon: '🩺', label: 'Run Diagnostics', hint: 'SDK, terminal, CLI, account', run: () => openDiagnostics() },
     { icon: '🗑', label: 'Open Trash', hint: 'deleted chats', run: () => openTrash() },
     { icon: '👁', label: (state.historyOn ? 'Hide' : 'Show') + ' chat history', hint: '', run: () => {
         state.historyOn = !state.historyOn;
