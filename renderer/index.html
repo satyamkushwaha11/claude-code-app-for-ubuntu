@@ -22,6 +22,9 @@
 
         <div class="hist-header">
           <span class="hist-title">Chat history</span>
+          <button id="groupBtn" class="trash-open-btn" title="Group chats by project">▤</button>
+          <button id="themeBtn" class="trash-open-btn" title="Switch to light theme">☀</button>
+          <button id="mcpBtn" class="trash-open-btn" title="MCP servers &amp; privacy">🔌</button>
           <button id="settingsBtn" class="trash-open-btn" title="Settings">⚙</button>
           <button id="trashBtn" class="trash-open-btn" title="Deleted chats (Trash)">🗑</button>
           <label class="switch" title="Show or hide saved chats">
@@ -43,6 +46,9 @@
             <div id="tabTitle" class="tab-title"></div>
             <div id="tabMeta" class="tab-meta"></div>
           </div>
+          <button id="artifactsBtn" class="artifacts-btn" title="Artifacts — preview what Claude builds, locally (Ctrl+Shift+A)">
+            ◧ Artifacts<span id="artifactsCount" class="artifacts-count" style="display: none"></span>
+          </button>
           <div class="mode-toggle">
             <button id="modeChat" class="mode-btn active">Chat</button>
             <button id="modeTerminal" class="mode-btn">Terminal</button>
@@ -52,7 +58,30 @@
 
         <div id="tabStrip" class="tab-strip" style="display: none"></div>
 
-        <div id="panes"></div>
+        <div id="workArea" style="display: none">
+          <div id="panes"></div>
+          <div id="artifactResizer" class="artifact-resizer" style="display: none"></div>
+          <aside id="artifactPanel" class="artifact-panel" style="display: none">
+            <div class="ap-head">
+              <select id="apSelect" class="ap-select" title="Artifacts in this project"></select>
+              <div class="ap-seg" id="apView">
+                <button data-view="preview" class="active">Preview</button>
+                <button data-view="code">Code</button>
+              </div>
+              <div class="ap-seg" id="apDevice" title="Preview width">
+                <button data-w="" class="active" title="Full width">🖥</button>
+                <button data-w="820" title="Tablet">▭</button>
+                <button data-w="390" title="Phone">▯</button>
+              </div>
+              <button id="apReload" class="ap-btn" title="Reload">⟳</button>
+              <button id="apBrowser" class="ap-btn" title="Open in your browser">↗</button>
+              <button id="apReveal" class="ap-btn" title="Show in file manager">📂</button>
+              <button id="apClose" class="ap-btn" title="Close panel">✕</button>
+            </div>
+            <div id="apBody" class="ap-body"></div>
+            <div id="apFoot" class="ap-foot"></div>
+          </aside>
+        </div>
 
         <div id="welcome">
           <div class="welcome-inner">
@@ -134,6 +163,17 @@
       </div>
     </div>
 
+    <!-- MCP servers & privacy (content rendered by mcp.js) -->
+    <div id="mcpModal" class="modal-overlay" style="display: none">
+      <div class="settings-card mcp-card">
+        <div class="settings-head">
+          <div class="settings-title">🔌 MCP servers &amp; privacy</div>
+          <button id="mcpClose" class="trash-close" title="Close">✕</button>
+        </div>
+        <div id="mcpBody" class="settings-body"></div>
+      </div>
+    </div>
+
     <!-- Settings -->
     <div id="settingsModal" class="modal-overlay" style="display: none">
       <div class="settings-card">
@@ -169,10 +209,94 @@
           <div class="settings-row">
             <label class="settings-label">Default permission mode</label>
             <select id="setMode" class="settings-select">
-              <option value="default">Ask each time</option>
+              <option value="default">Manual — ask each time</option>
               <option value="acceptEdits">Auto-accept edits</option>
               <option value="plan">Plan mode</option>
+              <option value="auto">Auto mode — a safety check approves actions (supported models only)</option>
             </select>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label">Default effort</label>
+            <select id="setEffort" class="settings-select">
+              <option value="">Model default</option>
+              <option value="low">Low — fastest</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="xhigh">Extra high</option>
+              <option value="max">Max — deepest thinking (supported models only)</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label">Talking to Claude (mic button or Ctrl+M)</label>
+            <select id="setVoiceSend" class="settings-select">
+              <option value="auto">Send when I stop talking</option>
+              <option value="review">Put my words in the message box so I can edit first</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label">Language I speak</label>
+            <select id="setVoiceLang" class="settings-select">
+              <option value="english">English</option>
+              <option value="hindi">Hindi</option>
+              <option value="bengali">Bengali</option>
+              <option value="marathi">Marathi</option>
+              <option value="tamil">Tamil</option>
+              <option value="telugu">Telugu</option>
+              <option value="urdu">Urdu</option>
+              <option value="gujarati">Gujarati</option>
+              <option value="punjabi">Punjabi</option>
+              <option value="spanish">Spanish</option>
+              <option value="french">French</option>
+              <option value="german">German</option>
+              <option value="portuguese">Portuguese</option>
+              <option value="italian">Italian</option>
+              <option value="japanese">Japanese</option>
+              <option value="chinese">Chinese</option>
+              <option value="arabic">Arabic</option>
+              <option value="russian">Russian</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label">Speech recognition (runs on this computer)</label>
+            <select id="setVoiceModel" class="settings-select">
+              <option value="onnx-community/whisper-base">Fast — Whisper base (downloads ~75 MB once)</option>
+              <option value="onnx-community/whisper-small">More accurate — Whisper small (~250 MB, slower)</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label">Read replies aloud</label>
+            <select id="setVoiceRead" class="settings-select">
+              <option value="mic">When I talk by mic</option>
+              <option value="always">Always</option>
+              <option value="off">Never</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label">Claude's voice</label>
+            <div class="settings-inline">
+              <select id="setVoiceName" class="settings-select"></select>
+              <select id="setVoiceRate" class="settings-select">
+                <option value="0.8">Slow</option>
+                <option value="1">Normal</option>
+                <option value="1.2">Fast</option>
+                <option value="1.4">Faster</option>
+              </select>
+              <button id="setVoiceTest" class="settings-btn">▶ Test</button>
+            </div>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label">Artifacts</label>
+            <select id="setArtifactAuto" class="settings-select">
+              <option value="on">Open the preview automatically when Claude builds a page or design</option>
+              <option value="off">Only when I click Preview</option>
+            </select>
+          </div>
+          <div class="settings-row">
+            <label class="settings-label">MCP servers &amp; privacy</label>
+            <div class="settings-account">
+              <span class="settings-hint">Connect apps like Figma or Notion on this computer only</span>
+              <button id="setMcp" class="settings-btn">Manage…</button>
+            </div>
           </div>
           <div class="settings-row">
             <label class="settings-label">Chat data folder</label>

@@ -16,12 +16,19 @@
     "productName": "Claude Code Studio",
     "files": [
       "main.js",
+      "stt-worker.js",
       "renderer/**/*",
-      "build/icon.png"
+      "build/icon.png",
+      "!node_modules/onnxruntime-web/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/{darwin,win32}/**",
+      "!node_modules/onnxruntime-node/bin/napi-v6/linux/*/libonnxruntime_providers_{cuda,tensorrt}.so"
     ],
     "asar": true,
     "asarUnpack": [
-      "**/node_modules/node-pty/**"
+      "**/node_modules/node-pty/**",
+      "**/node_modules/onnxruntime-node/**",
+      "**/node_modules/sharp/**",
+      "**/node_modules/@img/**"
     ],
     "linux": {
       "target": [
@@ -42,8 +49,10 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.145",
+    "@huggingface/transformers": "^4.3.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/xterm": "^5.5.0",
+    "highlight.js": "^11.12.0",
     "markdown-it": "^14.1.1",
     "marked": "^18.0.4",
     "node-pty": "^1.0.0"

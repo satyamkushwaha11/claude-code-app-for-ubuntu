@@ -9,4 +9,8 @@ if [ ! -x "$ELECTRON" ]; then
   exit 1
 fi
 
+# VS Code (and other Electron apps) export this to their terminals; with it set,
+# Electron starts as plain Node and the app crashes on `app.commandLine`.
+unset ELECTRON_RUN_AS_NODE
+
 exec "$ELECTRON" --no-sandbox "$DIR" "$@"
